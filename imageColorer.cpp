@@ -74,17 +74,27 @@ cv::Mat loadRgba(const fs::path& path) {
     return rgba;
 }
 
-int countComponents(const cv::Mat& rgba) {
+cv::Mat groupedTextureMask(const cv::Mat& rgba) {
     cv::Mat alpha(rgba.rows, rgba.cols, CV_8UC1);
     for (int row = 0; row < rgba.rows; ++row) {
         for (int column = 0; column < rgba.cols; ++column) {
             alpha.at<unsigned char>(row, column) =
-                rgba.at<cv::Vec4b>(row, column)[3] > 0 ? 1 : 0;
+                rgba.at<cv::Vec4b>(row, column)[3] > 0 ? 255 : 0;
         }
     }
 
+    const cv::Mat groupingKernel = cv::getStructuringElement(
+        cv::MORPH_ELLIPSE,
+        cv::Size(5, 5)
+    );
+    cv::Mat grouped;
+    cv::dilate(alpha, grouped, groupingKernel);
+    return grouped;
+}
+
+int countComponents(const cv::Mat& rgba) {
     cv::Mat labels;
-    return cv::connectedComponents(alpha, labels, 8) - 1;
+    return cv::connectedComponents(groupedTextureMask(rgba), labels, 8) - 1;
 }
 
 std::vector<cv::Vec3b> buildPalette(int totalComponents) {
@@ -129,22 +139,17 @@ std::vector<cv::Vec3b> buildPalette(int totalComponents) {
 }
 
 cv::Mat colorImage(const cv::Mat& rgba, int offset, const std::vector<cv::Vec3b>& palette) {
-    cv::Mat alpha(rgba.rows, rgba.cols, CV_8UC1);
-    for (int row = 0; row < rgba.rows; ++row) {
-        for (int column = 0; column < rgba.cols; ++column) {
-            alpha.at<unsigned char>(row, column) =
-                rgba.at<cv::Vec4b>(row, column)[3] > 0 ? 1 : 0;
-        }
-    }
-
     cv::Mat labels;
-    const int componentCount = cv::connectedComponents(alpha, labels, 8) - 1;
+    const int componentCount = cv::connectedComponents(
+        groupedTextureMask(rgba), labels, 8
+    ) - 1;
     cv::Mat output = rgba.clone();
     for (int label = 1; label <= componentCount; ++label) {
         const cv::Vec3b color = palette[offset + label - 1];
         for (int row = 0; row < output.rows; ++row) {
             for (int column = 0; column < output.cols; ++column) {
-                if (labels.at<int>(row, column) == label) {
+                if (labels.at<int>(row, column) == label
+                    && rgba.at<cv::Vec4b>(row, column)[3] > 0) {
                     cv::Vec4b& pixel = output.at<cv::Vec4b>(row, column);
                     pixel[0] = color[0];
                     pixel[1] = color[1];
