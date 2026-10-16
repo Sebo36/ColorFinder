@@ -6,6 +6,21 @@ __pycache__/
 # C extensions
 *.so
 
+# Affinity Designer files
+*.afdesign
+
+# Python code 
+python/ 
+
+# ColorFinder generated output and local examples
+ColorFinder_dist/
+colored_textures/
+demoModel/
+oldTextures/
+icons/
+moc3_remove_effects.py
+colorfinder_colors.json
+
 # Distribution / packaging
 .Python
 build/

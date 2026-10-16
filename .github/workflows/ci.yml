@@ -1,0 +1,135 @@
+name: Build and test ColorFinder
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install OpenCV
+        shell: pwsh
+        run: vcpkg install opencv4:x64-windows --clean-after-build
+
+      - name: Set up Python for fixture generation
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Configure CMake
+        shell: pwsh
+        run: >-
+          cmake -S . -B build -A x64
+          -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Build Release executables
+        shell: pwsh
+        run: cmake --build build --config Release --parallel
+
+      - name: Verify required executables
+        shell: pwsh
+        run: |
+          $executables = @(
+            '.\build\Release\imageColorer.exe',
+            '.\build\Release\picker.exe',
+            '.\build\Release\setup.exe'
+          )
+          foreach ($executable in $executables) {
+            if (-not (Test-Path $executable)) {
+              throw "Missing build output: $executable"
+            }
+          }
+
+      - name: Check missing model-root error
+        shell: pwsh
+        run: |
+          Remove-Item Env:COLORFINDER_IMAGE_DIR -ErrorAction SilentlyContinue
+          & .\build\Release\imageColorer.exe
+          if ($LASTEXITCODE -eq 0) {
+            throw 'imageColorer.exe should fail when COLORFINDER_IMAGE_DIR is missing'
+          }
+
+      - name: Run temporary model smoke test
+        shell: pwsh
+        run: |
+          $modelRoot = Join-Path $env:RUNNER_TEMP 'ColorFinderModel'
+          $textureFolder = Join-Path $modelRoot 'TestModel.2048'
+          New-Item -ItemType Directory -Force $textureFolder | Out-Null
+
+          # Generate a valid 1x1 opaque RGB PNG used only for this smoke test.
+          $pngPath = Join-Path $textureFolder 'texture.png'
+          python -c @'
+          import struct
+          import sys
+          import zlib
+          path = sys.argv[1]
+          def chunk(kind, data):
+              return (struct.pack(">I", len(data)) + kind + data
+                      + struct.pack(">I", zlib.crc32(kind + data) & 0xffffffff))
+          png = (b"\x89PNG\r\n\x1a\n"
+                 + chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+                 + chunk(b"IDAT", zlib.compress(b"\x00\xff\x00\x00"))
+                 + chunk(b"IEND", b""))
+          open(path, "wb").write(png)
+          '@ $pngPath
+
+          # Minimal MOC3-shaped fixture matching the sections used by imageColorer.
+          $moc3 = New-Object byte[] 2048
+          [Text.Encoding]::ASCII.GetBytes('MOC3').CopyTo($moc3, 0)
+          function Write-U32([byte[]] $buffer, [int] $offset, [uint32] $value) {
+            [Array]::Copy([BitConverter]::GetBytes($value), 0, $buffer, $offset, 4)
+          }
+          Write-U32 $moc3 0x40 0x300
+          Write-U32 $moc3 (0x300 + 4 * 4) 1
+          Write-U32 $moc3 (0x300 + 23 * 4) 1
+          Write-U32 $moc3 (0x300 + 24 * 4) 1
+          Write-U32 $moc3 (0x40 + 42 * 4) 0x380
+          for ($section = 108; $section -le 113; $section++) {
+            Write-U32 $moc3 (0x40 + $section * 4) ([uint32](0x400 + ($section - 108) * 4))
+          }
+          [IO.File]::WriteAllBytes((Join-Path $modelRoot 'model.moc3'), $moc3)
+
+          $env:COLORFINDER_IMAGE_DIR = $modelRoot
+          & .\build\Release\imageColorer.exe
+          if ($LASTEXITCODE -ne 0) {
+            throw 'imageColorer.exe failed on the temporary model fixture'
+          }
+
+          $mapPath = Join-Path $textureFolder 'colorfinder_colors.json'
+          if (-not (Test-Path $mapPath)) {
+            throw 'imageColorer.exe did not create colorfinder_colors.json'
+          }
+          $map = Get-Content $mapPath -Raw | ConvertFrom-Json
+          if (@($map.colors).Count -ne 1) {
+            throw 'The generated color map did not contain one texture color'
+          }
+          if (-not (Test-Path (Join-Path $textureFolder 'texture.png'))) {
+            throw 'The recolored texture was not preserved'
+          }
+
+      - name: Package Release artifact
+        shell: pwsh
+        run: |
+          $package = Join-Path $env:RUNNER_TEMP 'ColorFinder-package'
+          New-Item -ItemType Directory -Force $package | Out-Null
+          Copy-Item .\build\Release\imageColorer.exe, .\build\Release\picker.exe, .\build\Release\setup.exe $package
+          Copy-Item "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin\*.dll" $package
+          if (Test-Path .\README.md) {
+            Copy-Item .\README.md $package
+          }
+          Compress-Archive -Path (Join-Path $package '*') -DestinationPath .\ColorFinder-windows-x64.zip -Force
+
+      - name: Upload Release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ColorFinder-windows-x64
+          path: ColorFinder-windows-x64.zip
+          if-no-files-found: error
