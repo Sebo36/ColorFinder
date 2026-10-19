@@ -32,6 +32,7 @@ jobs:
           cmake -S . -B build -A x64
           -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
           -DVCPKG_MANIFEST_MODE=ON
+          -DVCPKG_INSTALLED_DIR="$env:GITHUB_WORKSPACE/vcpkg_installed"
 
       - name: Build Release executables
         shell: pwsh
