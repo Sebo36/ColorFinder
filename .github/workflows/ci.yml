@@ -144,8 +144,61 @@ jobs:
         run: |
           $package = Join-Path $env:RUNNER_TEMP 'ColorFinder-package'
           New-Item -ItemType Directory -Force $package | Out-Null
-          Copy-Item .\build\Release\imageColorer.exe, .\build\Release\picker.exe, .\build\Release\setup.exe $package
-          Copy-Item .\vcpkg_installed\x64-windows\bin\*.dll $package
+          $executables = @(
+            '.\build\Release\imageColorer.exe',
+            '.\build\Release\picker.exe',
+            '.\build\Release\setup.exe'
+          )
+          Copy-Item $executables $package
+
+          $dumpbin = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" `
+            -latest -products * `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -find 'VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe' |
+            Select-Object -First 1
+          if (-not $dumpbin) {
+            throw 'Could not find dumpbin.exe for dependency inspection'
+          }
+
+          $vcpkgBin = Join-Path $env:GITHUB_WORKSPACE 'vcpkg_installed\x64-windows\bin'
+          $runtimeDirectory = Join-Path $env:WINDIR 'System32'
+          foreach ($runtime in @('MSVCP140.dll', 'VCRUNTIME140.dll', 'VCRUNTIME140_1.dll')) {
+            $runtimePath = Join-Path $runtimeDirectory $runtime
+            if (Test-Path $runtimePath) {
+              Copy-Item $runtimePath $package -Force
+            }
+          }
+
+          $queue = @($executables | ForEach-Object { Get-Item $_ })
+          $copied = @{}
+          while ($queue.Count -gt 0) {
+            $binary = $queue[0]
+            if ($queue.Count -eq 1) { $queue = @() } else { $queue = @($queue[1..($queue.Count - 1)]) }
+            $dependencies = & $dumpbin /DEPENDENTS $binary.FullName 2>$null |
+              ForEach-Object {
+                if ($_ -match '^\s+([A-Za-z0-9_.-]+\.dll)\s*$') { $matches[1] }
+              }
+            foreach ($dependency in $dependencies) {
+              $lowerDependency = $dependency.ToLowerInvariant()
+              if ($lowerDependency -match '^(api-ms-win|ext-ms-win|kernel32|kernelbase|ntdll|user32|gdi32|advapi32|ole32|shell32|comdlg32|ws2_32|bcrypt|ucrtbase)') {
+                continue
+              }
+              if ($copied.ContainsKey($lowerDependency)) {
+                continue
+              }
+              $source = @(
+                (Join-Path $package $dependency),
+                (Join-Path $vcpkgBin $dependency)
+              ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+              if (-not $source) {
+                continue
+              }
+              Copy-Item $source $package -Force
+              $copied[$lowerDependency] = $true
+              $queue += Get-Item (Join-Path $package $dependency)
+            }
+          }
+
           Copy-Item .\LICENSE $package
           if (Test-Path .\README.md) {
             Copy-Item .\README.md $package
