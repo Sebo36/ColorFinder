@@ -33,6 +33,13 @@ HWND statusWindow = nullptr;
 HWND instructionLabel = nullptr;
 HWND pickedColorLabel = nullptr;
 HWND statusLabel = nullptr;
+HBRUSH statusBackgroundBrush = nullptr;
+HFONT statusRegularFont = nullptr;
+HFONT statusSemiboldFont = nullptr;
+
+constexpr COLORREF statusBackgroundColor = RGB(18, 22, 30);
+constexpr COLORREF statusTextColor = RGB(235, 240, 245);
+constexpr COLORREF statusAccentColor = RGB(70, 190, 170);
 
 const std::set<std::string> imageExtensions = {
     ".bmp", ".gif", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"
@@ -213,9 +220,20 @@ void setPickedColor(const cv::Vec3b& bgr) {
 LRESULT CALLBACK statusWindowProcedure(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
     if (message == WM_CTLCOLORSTATIC) {
         HDC deviceContext = reinterpret_cast<HDC>(wParam);
-        SetBkMode(deviceContext, OPAQUE);
-        SetBkColor(deviceContext, GetSysColor(COLOR_WINDOW));
-        return reinterpret_cast<LRESULT>(GetSysColorBrush(COLOR_WINDOW));
+        SetTextColor(
+            deviceContext,
+            reinterpret_cast<HWND>(lParam) == statusLabel
+                ? statusAccentColor
+                : statusTextColor
+        );
+        SetBkMode(deviceContext, TRANSPARENT);
+        return reinterpret_cast<LRESULT>(statusBackgroundBrush);
+    }
+    if (message == WM_ERASEBKGND) {
+        RECT clientArea{};
+        GetClientRect(window, &clientArea);
+        FillRect(reinterpret_cast<HDC>(wParam), &clientArea, statusBackgroundBrush);
+        return 1;
     }
     if (message == WM_CLOSE) {
         running = false;
@@ -234,7 +252,18 @@ bool createStatusWindow(HINSTANCE instance) {
     windowClass.hCursor = LoadCursorW(
         nullptr, reinterpret_cast<LPCWSTR>(static_cast<ULONG_PTR>(32512))
     );
-    windowClass.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+    statusBackgroundBrush = CreateSolidBrush(statusBackgroundColor);
+    statusRegularFont = CreateFontW(
+        -16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI"
+    );
+    statusSemiboldFont = CreateFontW(
+        -16, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI"
+    );
+    windowClass.hbrBackground = statusBackgroundBrush;
     RegisterClassW(&windowClass);
 
     statusWindow = CreateWindowExW(
@@ -244,8 +273,8 @@ bool createStatusWindow(HINSTANCE instance) {
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
         CW_USEDEFAULT,
         CW_USEDEFAULT,
-        360,
-        180,
+        400,
+        200,
         nullptr,
         nullptr,
         instance,
@@ -259,41 +288,44 @@ bool createStatusWindow(HINSTANCE instance) {
         L"STATIC",
         L"Pick a color anywhere on screen",
         WS_VISIBLE | WS_CHILD | SS_CENTER,
-        16,
+        24,
         18,
-        312,
-        22,
-        statusWindow,
-        nullptr,
-        instance,
-        nullptr
-    );
-    pickedColorLabel = CreateWindowW(
-        L"STATIC",
-        L"Picked color: none",
-        WS_VISIBLE | WS_CHILD | SS_CENTER,
-        16,
-        52,
-        312,
-        22,
-        statusWindow,
-        nullptr,
-        instance,
-        nullptr
-    );
-    statusLabel = CreateWindowW(
-        L"STATIC",
-        L"Waiting for a color...",
-        WS_VISIBLE | WS_CHILD | SS_CENTER,
-        16,
-        86,
-        312,
+        352,
         24,
         statusWindow,
         nullptr,
         instance,
         nullptr
     );
+    SendMessageW(instructionLabel, WM_SETFONT, reinterpret_cast<WPARAM>(statusSemiboldFont), TRUE);
+    pickedColorLabel = CreateWindowW(
+        L"STATIC",
+        L"Picked color: none",
+        WS_VISIBLE | WS_CHILD | SS_CENTER,
+        24,
+        52,
+        352,
+        24,
+        statusWindow,
+        nullptr,
+        instance,
+        nullptr
+    );
+    SendMessageW(pickedColorLabel, WM_SETFONT, reinterpret_cast<WPARAM>(statusRegularFont), TRUE);
+    statusLabel = CreateWindowW(
+        L"STATIC",
+        L"Waiting for a color...",
+        WS_VISIBLE | WS_CHILD | SS_CENTER,
+        24,
+        86,
+        352,
+        28,
+        statusWindow,
+        nullptr,
+        instance,
+        nullptr
+    );
+    SendMessageW(statusLabel, WM_SETFONT, reinterpret_cast<WPARAM>(statusSemiboldFont), TRUE);
     ShowWindow(statusWindow, SW_SHOW);
     UpdateWindow(statusWindow);
     return instructionLabel != nullptr && pickedColorLabel != nullptr
@@ -471,5 +503,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     if (statusWindow != nullptr) {
         DestroyWindow(statusWindow);
     }
+    DeleteObject(statusBackgroundBrush);
+    DeleteObject(statusRegularFont);
+    DeleteObject(statusSemiboldFont);
     return 0;
 }

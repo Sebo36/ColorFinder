@@ -12,6 +12,15 @@ constexpr int pathEditId = 1001;
 constexpr int browseButtonId = 1002;
 constexpr int saveButtonId = 1003;
 HWND pathEdit = nullptr;
+HBRUSH backgroundBrush = nullptr;
+HBRUSH editBrush = nullptr;
+HFONT regularFont = nullptr;
+HFONT semiboldFont = nullptr;
+
+constexpr COLORREF backgroundColor = RGB(18, 22, 30);
+constexpr COLORREF editColor = RGB(31, 39, 52);
+constexpr COLORREF textColor = RGB(235, 240, 245);
+constexpr COLORREF accentColor = RGB(70, 190, 170);
 
 void showError(const wchar_t* message) {
     MessageBoxW(nullptr, message, L"ColorFinder setup", MB_OK | MB_ICONERROR);
@@ -100,9 +109,57 @@ LRESULT CALLBACK windowProcedure(HWND window, UINT message, WPARAM wParam, LPARA
     switch (message) {
     case WM_CTLCOLORSTATIC: {
         HDC deviceContext = reinterpret_cast<HDC>(wParam);
-        SetBkMode(deviceContext, OPAQUE);
-        SetBkColor(deviceContext, GetSysColor(COLOR_WINDOW));
-        return reinterpret_cast<LRESULT>(GetSysColorBrush(COLOR_WINDOW));
+        SetTextColor(deviceContext, textColor);
+        SetBkMode(deviceContext, TRANSPARENT);
+        return reinterpret_cast<LRESULT>(backgroundBrush);
+    }
+    case WM_CTLCOLOREDIT: {
+        HDC deviceContext = reinterpret_cast<HDC>(wParam);
+        SetTextColor(deviceContext, textColor);
+        SetBkColor(deviceContext, editColor);
+        return reinterpret_cast<LRESULT>(editBrush);
+    }
+    case WM_ERASEBKGND: {
+        RECT clientArea{};
+        GetClientRect(window, &clientArea);
+        FillRect(reinterpret_cast<HDC>(wParam), &clientArea, backgroundBrush);
+        return 1;
+    }
+    case WM_DRAWITEM: {
+        const DRAWITEMSTRUCT* drawItem = reinterpret_cast<DRAWITEMSTRUCT*>(lParam);
+        if (drawItem->CtlType != ODT_BUTTON) {
+            break;
+        }
+        const bool saveButton = drawItem->CtlID == saveButtonId;
+        const bool pressed = (drawItem->itemState & ODS_SELECTED) != 0;
+        const COLORREF fillColor = saveButton ? accentColor : editColor;
+        HBRUSH buttonBrush = CreateSolidBrush(pressed ? RGB(55, 150, 138) : fillColor);
+        HPEN buttonPen = CreatePen(PS_SOLID, 1, saveButton ? accentColor : RGB(70, 85, 105));
+        HGDIOBJ oldBrush = SelectObject(drawItem->hDC, buttonBrush);
+        HGDIOBJ oldPen = SelectObject(drawItem->hDC, buttonPen);
+        RoundRect(
+            drawItem->hDC,
+            drawItem->rcItem.left,
+            drawItem->rcItem.top,
+            drawItem->rcItem.right,
+            drawItem->rcItem.bottom,
+            8,
+            8
+        );
+        SelectObject(drawItem->hDC, oldBrush);
+        SelectObject(drawItem->hDC, oldPen);
+        DeleteObject(buttonBrush);
+        DeleteObject(buttonPen);
+        SetBkMode(drawItem->hDC, TRANSPARENT);
+        SetTextColor(drawItem->hDC, textColor);
+        DrawTextW(
+            drawItem->hDC,
+            saveButton ? L"Save" : L"Browse...",
+            -1,
+            const_cast<RECT*>(&drawItem->rcItem),
+            DT_CENTER | DT_VCENTER | DT_SINGLELINE
+        );
+        return TRUE;
     }
     case WM_COMMAND:
         if (LOWORD(wParam) == browseButtonId) {
@@ -150,7 +207,19 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int showCommand) {
     windowClass.hCursor = LoadCursorW(
         nullptr, reinterpret_cast<LPCWSTR>(static_cast<ULONG_PTR>(32512))
     );
-    windowClass.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+    backgroundBrush = CreateSolidBrush(backgroundColor);
+    editBrush = CreateSolidBrush(editColor);
+    regularFont = CreateFontW(
+        -16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI"
+    );
+    semiboldFont = CreateFontW(
+        -16, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI"
+    );
+    windowClass.hbrBackground = backgroundBrush;
     RegisterClassW(&windowClass);
 
     HWND window = CreateWindowExW(
@@ -160,8 +229,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int showCommand) {
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
         CW_USEDEFAULT,
         CW_USEDEFAULT,
-        620,
-        150,
+        660,
+        190,
         nullptr,
         nullptr,
         instance,
@@ -172,33 +241,35 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int showCommand) {
         return 1;
     }
 
-    CreateWindowW(
+    HWND folderLabel = CreateWindowW(
         L"STATIC",
         L"Model root folder:",
         WS_VISIBLE | WS_CHILD,
-        16,
-        16,
-        190,
+        24,
+        20,
+        250,
         24,
         window,
         nullptr,
         instance,
         nullptr
     );
+    SendMessageW(folderLabel, WM_SETFONT, reinterpret_cast<WPARAM>(semiboldFont), TRUE);
     pathEdit = CreateWindowExW(
         WS_EX_CLIENTEDGE,
         L"EDIT",
         L"",
         WS_VISIBLE | WS_CHILD | WS_TABSTOP | ES_AUTOHSCROLL,
-        16,
-        42,
-        450,
-        26,
+        24,
+        52,
+        470,
+        32,
         window,
         reinterpret_cast<HMENU>(pathEditId),
         instance,
         nullptr
     );
+    SendMessageW(pathEdit, WM_SETFONT, reinterpret_cast<WPARAM>(regularFont), TRUE);
     wchar_t existingFolder[32768]{};
     const DWORD existingLength = GetEnvironmentVariableW(
         environmentVariable,
@@ -208,32 +279,34 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int showCommand) {
     if (existingLength > 0 && existingLength < std::size(existingFolder)) {
         SetWindowTextW(pathEdit, existingFolder);
     }
-    CreateWindowW(
+    HWND browseButton = CreateWindowW(
         L"BUTTON",
         L"Browse...",
-        WS_VISIBLE | WS_CHILD | WS_TABSTOP,
-        476,
-        42,
-        110,
-        26,
+        WS_VISIBLE | WS_CHILD | WS_TABSTOP | BS_OWNERDRAW,
+        510,
+        52,
+        120,
+        32,
         window,
         reinterpret_cast<HMENU>(browseButtonId),
         instance,
         nullptr
     );
-    CreateWindowW(
+    HWND saveButton = CreateWindowW(
         L"BUTTON",
         L"Save",
-        WS_VISIBLE | WS_CHILD | WS_TABSTOP | BS_DEFPUSHBUTTON,
-        476,
-        78,
-        110,
-        26,
+        WS_VISIBLE | WS_CHILD | WS_TABSTOP | BS_OWNERDRAW,
+        510,
+        96,
+        120,
+        32,
         window,
         reinterpret_cast<HMENU>(saveButtonId),
         instance,
         nullptr
     );
+    SendMessageW(browseButton, WM_SETFONT, reinterpret_cast<WPARAM>(semiboldFont), TRUE);
+    SendMessageW(saveButton, WM_SETFONT, reinterpret_cast<WPARAM>(semiboldFont), TRUE);
 
     ShowWindow(window, showCommand);
     UpdateWindow(window);
@@ -244,5 +317,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int showCommand) {
         DispatchMessageW(&message);
     }
     CoUninitialize();
+    DeleteObject(backgroundBrush);
+    DeleteObject(editBrush);
+    DeleteObject(regularFont);
+    DeleteObject(semiboldFont);
     return static_cast<int>(message.wParam);
 }
