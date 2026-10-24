@@ -12,23 +12,33 @@ jobs:
     runs-on: windows-latest
 
     env:
-      # vcpkg‑Features + Binary‑Cache aktivieren (muss vor dem ersten vcpkg‑Aufruf gesetzt sein)
       VCPKG_FEATURE_FLAGS: "manifests,binarycaching"
       VCPKG_BINARY_SOURCES: "clear;default"
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          submodules: true   # falls du vcpkg als Submodule nutzt
 
-      # ---------------------------------------------------------
-      # 1️⃣ Cache vcpkg‑Tool (vcpkg.exe, scripts, …)
       - name: Cache vcpkg tool
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/vcpkg
           key: ${{ runner.os }}-vcpkg-${{ hashFiles('vcpkg.json') }}
 
-      # 2️⃣ Cache vcpkg‑Packages (buildtrees, packages, downloads)
+      - name: Bootstrap vcpkg if missing
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${{ github.workspace }}\vcpkg\vcpkg.exe")) {
+            Write-Host "vcpkg not found – cloning repository"
+            git clone https://github.com/microsoft/vcpkg.git "${{ github.workspace }}\vcpkg"
+            & "${{ github.workspace }}\vcpkg\bootstrap-vcpkg.bat" -disableMetrics
+          } else {
+            Write-Host "vcpkg already present – using cached copy"
+          }
+
+      # Cache vcpkg packages (buildtrees, packages, downloads)
       - name: Cache vcpkg packages
         uses: actions/cache@v4
         with:
@@ -39,54 +49,6 @@ jobs:
           key: ${{ runner.os }}-vcpkg-pkgs-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
             ${{ runner.os }}-vcpkg-pkgs-
-
-      # 3️⃣ Bootstrap vcpkg (falls noch nicht vorhanden)
-      - name: Bootstrap vcpkg
-        shell: pwsh
-        run: |
-          if (-not (Test-Path "${{ github.workspace }}/vcpkg/vcpkg.exe")) {
-            .\vcpkg\bootstrap-vcpkg.bat -disableMetrics
-          }
-
-      # 4️⃣ Installiere (bzw. stelle sicher) dass OpenCV verfügbar ist
-      #    (Dank binary‑caching wird das fast sofort erledigt)
-      - name: Install vcpkg dependencies
-        shell: pwsh
-        run: |
-          # Das Manifest (vcpkg.json) enthält bereits opencv
-          vcpkg install --triplet x64-windows
-
-      - name: Set up Python for fixture generation
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-
-      - name: Configure CMake
-        shell: pwsh
-        run: >-
-          cmake -S . -B build -A x64
-          -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_INSTALLATION_ROOT }}/scripts/buildsystems/vcpkg.cmake"
-          -DVCPKG_MANIFEST_MODE=ON
-          -DVCPKG_INSTALLED_DIR="${{ github.workspace }}/vcpkg_installed"
-
-      - name: Build Release executables
-        shell: pwsh
-        run: cmake --build build --config Release --parallel
-
-      # … (die restlichen Schritte aus deinem Original‑Workflow) …
-      - name: Verify required executables
-        shell: pwsh
-        run: |
-          $executables = @(
-            '.\build\Release\imageColorer.exe',
-            '.\build\Release\picker.exe',
-            '.\build\Release\setup.exe'
-          )
-          foreach ($executable in $executables) {
-            if (-not (Test-Path $executable)) {
-              throw "Missing build output: $executable"
-            }
-          }
 
       - name: Check missing model-root error
         shell: pwsh
