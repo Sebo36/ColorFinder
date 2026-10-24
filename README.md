@@ -1,5 +1,46 @@
 # ColorFinder
 
+## Download the release
+
+For normal use, download the latest Windows package from the
+[latest GitHub release](https://github.com/Sebo36/ColorFinder/releases/latest).
+Extract the ZIP before running `setup.exe`.
+
+The executables are **not code-signed**. Windows may therefore display an
+unknown-publisher or SmartScreen warning. This is expected for this project;
+verify that you downloaded the package from the official repository and then
+choose `More info` followed by `Run anyway` to launch it.
+
+## Compile from source
+
+To build the suite yourself, install:
+
+- Visual Studio 2022 with the Desktop development with C++ workload.
+- Git.
+- CMake 3.20 or newer.
+
+Clone the repository including its vcpkg submodule:
+
+```powershell
+git clone --recurse-submodules https://github.com/Sebo36/ColorFinder.git
+cd ColorFinder
+```
+
+Bootstrap vcpkg and configure the 64-bit Release build:
+
+```powershell
+.\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+cmake -S . -B build -A x64 `
+	-DCMAKE_TOOLCHAIN_FILE="$PWD\vcpkg\scripts\buildsystems\vcpkg.cmake" `
+	-DVCPKG_MANIFEST_MODE=ON `
+	-DVCPKG_INSTALLED_DIR="$PWD\vcpkg_installed"
+cmake --build build --config Release
+```
+
+The executables are created in `build\Release`. OpenCV runtime DLLs must be
+placed beside the executables before sharing them with another user.
+
+## How to use
 ColorFinder is a Windows utility for artists who want to identify and retexture
 parts of a VTube Studio Live2D model. It temporarily turns every connected
 texture part into a unique color, so you can click a visible part of the model
@@ -19,8 +60,8 @@ model.
 The selected model root should contain:
 
 - A `.moc3` file.
-- A texture folder whose name ends with a numeric suffix, for example
-  `MyModel.2048`.
+- Exactly one texture folder whose name ends with a numeric suffix, for example
+  `MyModel.2048`. Having multiple such folders may cause unwanted behavior. 
 - Texture images inside that folder, such as `.png`, `.jpg`, `.jpeg`, `.bmp`,
 	`.gif`, `.tif`, `.tiff`, or `.webp` files.
 
@@ -76,9 +117,10 @@ When a match is found, the matching image opens in an OpenCV window:
 If no indexed color is close enough, the picker reports `No matching Texture
 found`. Close all matching image windows to exit after a successful match.
 
-Press `Esc` to exit at any time. The normal mouse cursor is restored only when the
-program closes correctly. If the program crashes unexpectedly or is closed using the X-button the cursor cannot be restord.
-To restore the normal cursor you need to reopen the program and close it correctly.
+Press `Esc` to exit at any time. The normal mouse cursor is restored when the
+program closes normally. Force-killing the process may prevent Windows from
+running the cleanup code; if that happens, restart `picker.exe` and close it
+normally to restore the cursor.
 
 ## Portable package
 
