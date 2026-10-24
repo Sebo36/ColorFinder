@@ -164,7 +164,9 @@ jobs:
           $runtimeDirectory = Join-Path $env:WINDIR 'System32'
           foreach ($runtime in @('MSVCP140.dll', 'VCRUNTIME140.dll', 'VCRUNTIME140_1.dll')) {
             $runtimePath = Join-Path $runtimeDirectory $runtime
-            if (Test-Path $runtimePath) {
+            $destPath = Join-Path $package $runtime
+            # Nur kopieren, wenn die Datei noch nicht existiert
+            if (Test-Path $runtimePath -and -not (Test-Path $destPath)) {
               Copy-Item $runtimePath $package -Force
             }
           }
