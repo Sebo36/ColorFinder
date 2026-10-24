@@ -24,6 +24,8 @@ colorfinder_colors.json
 # Distribution / packaging
 .Python
 build/
+vcpkg_installed/
+vcpkg-binary-cache/
 develop-eggs/
 dist/
 downloads/
