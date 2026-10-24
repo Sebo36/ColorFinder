@@ -185,30 +185,22 @@ jobs:
                 if ($_ -match '^\s+([A-Za-z0-9_.-]+\.dll)\s*$') { $matches[1] }
               }
             foreach ($dependency in $dependencies) {
-              $lowerDependency = $dependency.ToLowerInvariant()
-              if ($lowerDependency -match '^(api-ms-win|ext-ms-win|kernel32|kernelbase|ntdll|user32|gdi32|advapi32|ole32|shell32|comdlg32|ws2_32|bcrypt|ucrtbase)') {
-                continue
-              }
-              if ($copied.ContainsKey($lowerDependency)) {
-                continue
-              }
-              $source = @(
-                (Join-Path $package $dependency),
-                (Join-Path $vcpkgBin $dependency)
-              ) | Where-Object { Test-Path $_ } | Select-Object -First 1
-              if (-not $source) {
-                continue
-              }
+              $destFile = Join-Path $package $dependency
+              if (Test-Path $destFile) { $copied[$lowerDependency] = $true; continue }
+
+              $source = Join-Path $vcpkgBin $dependency
+              if (-not (Test-Path $source)) { continue }
+
               Copy-Item $source $package -Force
               $copied[$lowerDependency] = $true
-              $queue += Get-Item (Join-Path $package $dependency)
-            }
-          }
+              $queue += Get-Item $destFile
+                  }
+                }
 
-          Copy-Item .\LICENSE $package
-          if (Test-Path .\README.md) {
-            Copy-Item .\README.md $package
-          }
+                Copy-Item .\LICENSE $package
+                if (Test-Path .\README.md) {
+                  Copy-Item .\README.md $package
+            }
           Compress-Archive -Path (Join-Path $package '*') -DestinationPath .\ColorFinder-windows-x64.zip -Force
 
       - name: Upload Release artifact
