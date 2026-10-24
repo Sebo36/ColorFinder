@@ -7,8 +7,8 @@ For normal use, download the latest Windows package from the
 Extract the ZIP before running `setup.exe`.
 
 The executables are **not code-signed**. Windows may therefore display an
-unknown-publisher or SmartScreen warning. This is expected for this project;
-verify that you downloaded the package from the official repository and then
+unknown-publisher or SmartScreen warning. This is expected for this project.
+Verify that you downloaded the package from the official repository and then
 choose `More info` followed by `Run anyway` to launch it.
 
 ## Compile from source
@@ -81,11 +81,10 @@ Run `imageColorer.exe`.
 It will:
 
 1. Find the child texture folder ending in `.number`.
-2. Detect each texture by connected non-transparent pixels.
+2. Detect each texture by connected non-transparent pixels close to eachother.
 3. Give every texture part a different, strongly separated RGB color across all
 	texture atlases.
-4. Make visible texture pixels fully opaque while keeping the background
-	transparent.
+4. Make visible texture pixels fully opaque.
 5. Replace the original texture files in the copied model.
 6. Remove blend modes and color effects from the model's `.moc3` file.
 7. Create `colorfinder_colors.json` inside the numbered texture folder so the
@@ -101,25 +100,21 @@ Run `picker.exe`.
 
 The mouse cursor changes to a crosshair. The picker window tells you what to do
 and displays the last RGB color selected. Click any visible part of the model
-on screen, including a model shown in VTube Studio.
-
-The picker uses the color map to identify the most likely texture image instead
+on screen. The picker uses the color map to identify the most likely texture image instead
 of scanning every image. It accepts a small RGB difference to account for
-display scaling, color management, and photo-editor changes.
+display scaling or slight color variation.
 
-When a match is found, the matching image opens in an OpenCV window:
+When a match is found, the matching image opens in a new window:
 
 - Matching pixels are bright red.
 - Other visible texture pixels are grey.
-- Transparent areas use a checkerboard background.
-- The original texture file is not changed by the picker.
 
 If no indexed color is close enough, the picker reports `No matching Texture
 found`. Close all matching image windows to exit after a successful match.
 
 Press `Esc` to exit at any time. The normal mouse cursor is restored when the
 program closes normally. Force-killing the process may prevent Windows from
-running the cleanup code; if that happens, restart `picker.exe` and close it
+running the cleanup code. if that happens, restart `picker.exe` and close it
 normally to restore the cursor.
 
 ## Portable package
