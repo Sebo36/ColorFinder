@@ -160,6 +160,7 @@ jobs:
             throw 'Could not find dumpbin.exe for dependency inspection'
           }
 
+          $vcpkgBin = Join-Path $env:GITHUB_WORKSPACE 'vcpkg_installed\x64-windows\bin'
           $runtimeDirectory = Join-Path $env:WINDIR 'System32'
           foreach ($runtime in @('MSVCP140.dll', 'VCRUNTIME140.dll', 'VCRUNTIME140_1.dll')) {
             $runtimePath = Join-Path $runtimeDirectory $runtime
