@@ -160,14 +160,17 @@ jobs:
             throw 'Could not find dumpbin.exe for dependency inspection'
           }
 
-          $vcpkgBin = Join-Path $env:GITHUB_WORKSPACE 'vcpkg_installed\x64-windows\bin'
           $runtimeDirectory = Join-Path $env:WINDIR 'System32'
           foreach ($runtime in @('MSVCP140.dll', 'VCRUNTIME140.dll', 'VCRUNTIME140_1.dll')) {
             $runtimePath = Join-Path $runtimeDirectory $runtime
             $destPath = Join-Path $package $runtime
-            # Nur kopieren, wenn die Datei noch nicht existiert
-            if (Test-Path $runtimePath -and -not (Test-Path $destPath)) {
-              Copy-Item $runtimePath $package -Force
+            
+            # Überprüfung in getrennten Schritten, um PowerShell-Syntax-Verwirrung zu vermeiden
+            $sourceExists = Test-Path -Path $runtimePath
+            $destExists = Test-Path -Path $destPath
+            
+            if ($sourceExists -and (-not $destExists)) {
+              Copy-Item -Path $runtimePath -Destination $package -Force
             }
           }
 
